@@ -9,7 +9,7 @@ triangles. The OEIS lists both up to n = 25 (Martin Fuller, 2015, about a day of
 from n = 26 on are new, computed by an exact formula in
 [oeis-results/A000080](https://github.com/guillochon/oeis-results/tree/main/A000080).
 
-The page shows every minimal triangle graph up to n = 9, random examples for n = 10 to 40, and the counts table.
+The page shows every minimal triangle graph up to n = 9, random examples from n = 10 up to the last computed count (n ≤ 100), and the counts table.
 
 - **Colours.** Grey triangles are *lone* triangles. Each coloured group is a *block*: points joined in a
   multigraph with no cut point (several triangles may run along one pair of points), where every triangle
@@ -30,7 +30,7 @@ Everything runs in the browser, in one file (`index.html`).
 - **Layout.** A spring layout of the point–triangle incidence graph, then two clean-ups: books (several triangles
   on one pair of points) are fanned open around their shared pair, and private corners are mirrored across
   their triangle when that removes crossings; the best of several tries is kept. Triangles on a common pair
-  always overlap a little; otherwise every graph up to n = 20 is drawn without crossings.
+  always overlap a little; small graphs come out without crossings, the largest with a few.
 
 Made by James Guillochon with Claude. The source lives in the oeis-sniper project (`viz/A000080/`); this repo holds
 the published copy.

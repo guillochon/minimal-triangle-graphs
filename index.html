@@ -82,6 +82,8 @@ select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; ba
 .row-head .new { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
 .row-head .span { font-size: 12px; color: var(--muted); margin-left: auto; }
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.cards.big { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+.cards.huge { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .card { aspect-ratio: 1; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; position: relative; overflow: hidden; }
 .card svg { width: 100%; height: 100%; display: block; }
 .card .tag { position: absolute; left: 6px; bottom: 4px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
@@ -188,7 +190,7 @@ const DATA = JSON.parse(document.getElementById("mtg-data").textContent);
 const SMALL = DATA.small || {};            // n -> [{t: [[a,b,c],...], b: [blockId | -1, ...]}]
 const COUNTS = DATA.counts || {};          // n -> [A000080 string, A048781 string | null]
 const KNOWN = DATA.known_upto || 25;
-const ROW_MAX = 40;                        // rows of pictures
+const ROW_MAX = Math.min(100, Math.max(40, ...Object.keys(COUNTS).map(Number)));  // rows of pictures
 const NPAL = 8;
 
 function mulberry32(a) {
@@ -296,20 +298,34 @@ function layoutOnce(g, n, rng) {
 
 /* Number of proper crossings between sides of different triangles that share no endpoint.  Triangles on a
    common pair (pages of a book) always overlap, so they don't count. */
-function crossings(g, P) {
+function sides(g) {
   const S = [];
   g.t.forEach((tr, j) => { S.push([tr[0], tr[1], j], [tr[1], tr[2], j], [tr[0], tr[2], j]); });
-  const orient = (a, b, c) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+  return S;
+}
+
+const orient = (a, b, c) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+
+function sidesCross(g, P, s1, s2) {
+  const [a, b, ti] = s1, [c, d, tj] = s2;
+  if (ti === tj || a === c || a === d || b === c || b === d) return false;
+  const A = g.t[ti], B = g.t[tj];
+  if ((A[0] === B[0] || A[0] === B[1] || A[0] === B[2]) + (A[1] === B[0] || A[1] === B[1] || A[1] === B[2]) +
+      (A[2] === B[0] || A[2] === B[1] || A[2] === B[2]) >= 2) return false;
+  return orient(P[a], P[b], P[c]) * orient(P[a], P[b], P[d]) < 0 &&
+    orient(P[c], P[d], P[a]) * orient(P[c], P[d], P[b]) < 0;
+}
+
+function crossings(g, P, S = sides(g)) {
   let k = 0;
-  for (let i = 0; i < S.length; i++) for (let j = i + 1; j < S.length; j++) {
-    const [a, b, ti] = S[i], [c, d, tj] = S[j];
-    if (ti === tj || a === c || a === d || b === c || b === d) continue;
-    const A = g.t[ti], B = g.t[tj];
-    if ((A[0] === B[0] || A[0] === B[1] || A[0] === B[2]) + (A[1] === B[0] || A[1] === B[1] || A[1] === B[2]) +
-        (A[2] === B[0] || A[2] === B[1] || A[2] === B[2]) >= 2) continue;
-    if (orient(P[a], P[b], P[c]) * orient(P[a], P[b], P[d]) < 0 &&
-        orient(P[c], P[d], P[a]) * orient(P[c], P[d], P[b]) < 0) k++;
-  }
+  for (let i = 0; i < S.length; i++) for (let j = i + 1; j < S.length; j++) if (sidesCross(g, P, S[i], S[j])) k++;
+  return k;
+}
+
+/* Crossings on the sides that end at point x (all that can change when x moves). */
+function crossingsAt(g, P, S, x) {
+  let k = 0;
+  for (const s1 of S) if (s1[0] === x || s1[1] === x) for (const s2 of S) if (sidesCross(g, P, s1, s2)) k++;
   return k;
 }
 
@@ -319,8 +335,9 @@ function crossings(g, P) {
 function untangle(g, n, P) {
   const deg = new Array(n).fill(0), home = new Array(n).fill(-1);
   g.t.forEach((tr, j) => tr.forEach(p => { deg[p]++; home[p] = j; }));
-  let k = crossings(g, P);
-  for (let pass = 0; pass < 3 && k > 0; pass++) {
+  const S = sides(g);
+  let k = crossings(g, P, S);
+  for (let pass = 0; pass < 6 && k > 0; pass++) {
     let moved = false;
     for (let x = 0; x < n && k > 0; x++) {
       if (deg[x] !== 1) continue;
@@ -332,11 +349,13 @@ function untangle(g, n, P) {
       const mx = (ax + bx) / 2, my = (ay + by) / 2, h = Math.hypot(px - fx, py - fy) || Math.sqrt(L2) / 2;
       const nx = -uy / Math.sqrt(L2), ny = ux / Math.sqrt(L2);
       const cands = [[2 * fx - px, 2 * fy - py], [mx + nx * h, my + ny * h], [mx - nx * h, my - ny * h]];
+      const before = crossingsAt(g, P, S, x);
+      if (!before) continue;
       for (const c of cands) {
         const old = P[x];
         P[x] = c;
-        const k2 = crossings(g, P);
-        if (k2 < k) { k = k2; moved = true; break; }
+        const after = crossingsAt(g, P, S, x);
+        if (after < before) { k -= before - after; moved = true; break; }
         P[x] = old;
       }
     }
@@ -406,7 +425,7 @@ function fanBooks(g, n, P) {
 /* Triangles only share points, so a good picture has no crossing sides: keep the best of several untangled
    layouts. */
 function layout(g, n, rng) {
-  const tries = n <= 12 ? 10 : n <= 25 ? 6 : 4;
+  const tries = n <= 12 ? 10 : 6;
   let best = null, bestK = Infinity;
   for (let i = 0; i < tries && bestK > 0; i++) {
     const P = layoutOnce(g, n, rng);
@@ -441,7 +460,7 @@ function drawCard(g, n, rng, label) {
     poly.style.fill = c; poly.style.stroke = c;
     svg.appendChild(poly);
   });
-  const r = n > 30 ? 1.1 : n > 16 ? 1.4 : 1.8;
+  const r = n > 60 ? 0.9 : n > 30 ? 1.1 : n > 16 ? 1.4 : 1.8;
   P.forEach(([px, py]) => {
     const c = document.createElementNS(SVGNS, "circle");
     c.setAttribute("cx", px.toFixed(2)); c.setAttribute("cy", py.toFixed(2)); c.setAttribute("r", r);
@@ -459,7 +478,10 @@ function drawCard(g, n, rng, label) {
 const fmt = s => s.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 let seed = (Math.random() * 2 ** 32) >>> 0;
 
+let generation = 0;
+
 function buildRows() {
+  generation++;
   const rows = document.getElementById("rows");
   rows.innerHTML = "";
   const per = +document.getElementById("per").value;
@@ -475,13 +497,19 @@ function buildRows() {
       `<span class="span">${all ? (all.length === 1 ? "the only one" : `all ${all.length} shown`) : `${per} random examples`}</span>`;
     row.appendChild(head);
     const cards = document.createElement("div");
-    cards.className = "cards";
+    cards.className = n > 70 ? "cards huge" : n > 40 ? "cards big" : "cards";
     row.appendChild(cards);
     rows.appendChild(row);
-    row._fill = () => {
-      const rng = mulberry32(seed ^ (n * 2654435761));
-      if (all) all.forEach((g, i) => cards.appendChild(drawCard(g, n, rng, `${g.t.length}△`)));
-      else for (let i = 0; i < per; i++) { const g = randomMTG(n, rng); cards.appendChild(drawCard(g, n, rng, `${g.t.length}△`)); }
+    // one card per frame, so big rows don't freeze the page; a rebuild bumps `generation` and stops old fills
+    row._fill = async () => {
+      const gen = generation, rng = mulberry32(seed ^ (n * 2654435761));
+      const count = all ? all.length : per;
+      for (let i = 0; i < count; i++) {
+        if (gen !== generation) return;
+        const g = all ? all[i] : randomMTG(n, rng);
+        cards.appendChild(drawCard(g, n, rng, `${g.t.length}△`));
+        if (n > 30) await new Promise(requestAnimationFrame);
+      }
     };
   }
   const io = new IntersectionObserver(entries => {
