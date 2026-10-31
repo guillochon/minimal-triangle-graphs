@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Minimal Triangle Graphs</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+/* Layout: header (title, explanation, controls, colour key), then one row of cards per point count n, then the
+   table of counts.  Each card is a small SVG of one minimal triangle graph: points are dots, triples are
+   shaded triangles. */
+:root {
+  --bg: #eef0ec;
+  --surface: #f9faf7;
+  --fg: #1d221c;
+  --muted: #5d665b;
+  --line: #d4d9d0;
+  --accent: #2f5a3c;
+  --lone: #8a948a;
+  --point: #1d221c;
+  --c0: #c0562f; --c1: #2f6db0; --c2: #8c4fb0; --c3: #b08a1f; --c4: #1f8f7a; --c5: #b03f6d; --c6: #5a7d1f; --c7: #6b5a3f;
+  --font-display: "Spectral", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111410; --surface: #181c17; --fg: #e5e9e2; --muted: #98a295; --line: #2b3229; --accent: #9fd0aa;
+    --lone: #7d887b; --point: #e5e9e2;
+    --c0: #f08a5d; --c1: #6aa8ec; --c2: #c08ae6; --c3: #e0c050; --c4: #4fd0b6; --c5: #ec7aa6; --c6: #a6d060; --c7: #c9ad86;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111410; --surface: #181c17; --fg: #e5e9e2; --muted: #98a295; --line: #2b3229; --accent: #9fd0aa;
+  --lone: #7d887b; --point: #e5e9e2;
+  --c0: #f08a5d; --c1: #6aa8ec; --c2: #c08ae6; --c3: #e0c050; --c4: #4fd0b6; --c5: #ec7aa6; --c6: #a6d060; --c7: #c9ad86;
+  color-scheme: dark;
+}
+html, body { background: var(--bg); color: var(--fg); margin: 0; }
+body { font-family: var(--font-body); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 56px; display: flex; flex-direction: column; gap: 28px; }
+
+header.top { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
+.eyebrow a { color: inherit; }
+h1 { font-family: var(--font-display); font-weight: 600; font-size: 36px; line-height: 1.05; margin: 0 0 10px; text-wrap: balance; }
+.lede { margin: 0 0 8px; max-width: 72ch; color: var(--muted); }
+.lede b { color: var(--fg); font-weight: 500; }
+.lede a { color: var(--accent); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.controls label { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; }
+select, button { font: inherit; color: var(--fg); }
+select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.switch { cursor: pointer; color: var(--fg) !important; user-select: none; position: relative; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch .track { width: 32px; height: 18px; border-radius: 999px; background: var(--line); position: relative; flex: none; transition: background .15s; }
+.switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface); transition: transform .15s; }
+.switch input:checked + .track { background: var(--accent); }
+.switch input:checked + .track::after { transform: translateX(14px); }
+.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+#regen { font-weight: 600; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: var(--surface); cursor: pointer; }
+#regen:hover { filter: brightness(1.1); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.key { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.key ul { display: flex; flex-wrap: wrap; gap: 6px 16px; list-style: none; margin: 0; padding: 0; }
+.key li { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.key svg { flex: none; }
+.key .note { flex: 1 1 280px; min-width: 0; font-size: 13px; color: var(--muted); }
+
+.row { display: flex; flex-direction: column; gap: 10px; }
+.row-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.row-head h2 { font-family: var(--font-display); font-weight: 500; font-size: 22px; margin: 0; }
+.row-head h2 i { font-style: italic; }
+.row-head .count { font-family: var(--font-mono); font-size: 13px; }
+.row-head .new { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
+.row-head .span { font-size: 12px; color: var(--muted); margin-left: auto; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.card { aspect-ratio: 1; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; position: relative; overflow: hidden; }
+.card svg { width: 100%; height: 100%; display: block; }
+.card .tag { position: absolute; left: 6px; bottom: 4px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.tri { stroke-width: .7; stroke-linejoin: round; fill-opacity: .32; }
+.pt { fill: var(--point); }
+
+section.counts h2, section.how h2 { font-family: var(--font-display); font-weight: 500; font-size: 26px; margin: 0 0 8px; }
+.how p, .how li { max-width: 76ch; color: var(--muted); }
+.how b { color: var(--fg); font-weight: 500; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: right; padding: 4px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-weight: 600; color: var(--muted); position: sticky; top: 0; background: var(--surface); }
+td { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+td.n { color: var(--muted); }
+tr.isnew td.a { color: var(--accent); font-weight: 500; }
+td.st { font-family: var(--font-body); font-size: 12px; color: var(--muted); text-align: left; }
+tr.isnew td.st { color: var(--accent); }
+.foot { font-size: 12px; color: var(--muted); }
+.foot a { color: var(--accent); }
+@media (max-width: 560px) {
+  h1 { font-size: 28px; }
+  .cards { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow"><a href="https://oeis.org/A000080">OEIS A000080</a> · <a href="https://oeis.org/A048781">A048781</a></p>
+      <h1>Minimal Triangle Graphs</h1>
+      <p class="lede">Take <b>n</b> points and glue triangles onto them, each triangle joining three of the points, until
+        everything is connected. The result is <b>minimal</b> if no triangle is spare: removing any one
+        disconnects something. A000080 counts these up to relabelling the points, and A048781 adds up their
+        triangles.</p>
+      <p class="lede">Until now the counts were known up to <b>n = 25</b> (Martin Fuller, 2015, about a day of computer
+        search). A <b>structure theorem</b> turns the problem into a formula, which gives every term up to
+        <b id="maxn">n = 80</b> in seconds. Each such graph is a tree of grey <b>lone triangles</b> and coloured
+        <b>blocks</b>. In a block, some pairs of points are joined by several triangles, so those pairs form a
+        loop-free multigraph with no cut point, and every triangle sticks out one free corner.</p>
+    </div>
+    <div class="controls">
+      <button id="regen" type="button">New examples</button>
+      <label>Examples per row
+        <select id="per">
+          <option value="6">6</option>
+          <option value="12" selected>12</option>
+          <option value="24">24</option>
+        </select>
+      </label>
+      <label class="switch"><input id="colour" type="checkbox" checked><span class="track"></span>Colour blocks</label>
+    </div>
+    <div class="key" aria-label="Colour key">
+      <ul>
+        <li><svg width="22" height="18" viewBox="0 0 22 18" aria-hidden="true"><polygon points="2,16 20,16 11,2" class="tri" style="fill:var(--lone);stroke:var(--lone)"/></svg>lone triangle</li>
+        <li><svg width="30" height="18" viewBox="0 0 30 18" aria-hidden="true"><polygon points="2,16 15,9 9,2" class="tri" style="fill:var(--c0);stroke:var(--c0)"/><polygon points="2,16 15,9 21,16" class="tri" style="fill:var(--c0);stroke:var(--c0)"/><polygon points="15,9 28,4 22,15" class="tri" style="fill:var(--c1);stroke:var(--c1)"/></svg>one block per colour</li>
+        <li><svg width="12" height="18" viewBox="0 0 12 18" aria-hidden="true"><circle cx="6" cy="9" r="3" class="pt"/></svg>point</li>
+      </ul>
+      <p class="note">Rows up to n = 9 show every graph. Larger rows show random examples. They are built from
+        the structure theorem and can reach every graph, but they are not uniform samples.</p>
+    </div>
+  </header>
+
+  <main id="rows"></main>
+
+  <section class="how">
+    <h2>How the counting works</h2>
+    <p>Draw the <b>incidence graph</b>: one node per point, one node per triangle, and an edge whenever a point
+      lies on a triangle. A system is connected exactly when this graph is. It is minimal exactly when every triangle
+      node is a <b>cut node</b>, so removing it splits the graph.</p>
+    <p>That pins down the pieces. Every 2-connected piece of the incidence graph is either a single edge or a
+      <b>multigraph block</b>: a loop-free multigraph on the points with no cut point, whose edges are triangles, and
+      each of those triangles has its third corner outside the block. So a minimal triangle graph is a tree
+      of lone triangles and such blocks, glued at points.</p>
+    <p>Trees and blocks are what <b>Pólya counting</b> (species theory) handles well. The blocks come from the
+      explicit cycle index of all multigraphs by the classical logarithm and block inversion, substituted
+      directly into one-variable power series. Every term up to n is then a sum over the integer partitions of
+      numbers up to n, computed modulo several 62-bit primes and combined with the Chinese remainder theorem.
+      Marking each triangle with a variable y and differentiating at y = 1 gives A048781 too.</p>
+    <p>Checks: the formula reproduces all 23 known terms of both sequences. For n ≤ 15 the blocks found in
+      the full lists of graphs agree with the block counts the formula predicts. The extra primes agree on every
+      term.</p>
+  </section>
+
+  <section class="counts">
+    <h2>Counts</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>n</th><th>A000080(n)</th><th>A048781(n)</th><th style="text-align:left">status</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="foot">Method, code and checks: <a href="https://github.com/guillochon/oeis-results/tree/main/A000080">oeis-results/A000080</a>.
+    Small-n lists from Martin Fuller's program on the OEIS entry.</p>
+</div>
+
+<script id="mtg-data" type="application/json">{"known_upto":25,"small":{"3":[{"t":[[0,1,2]],"b":[-1]}],"4":[{"t":[[0,1,2],[0,1,3]],"b":[0,0]}],"5":[{"t":[[0,1,2],[0,3,4]],"b":[-1,-1]},{"t":[[0,1,2],[0,1,3],[0,1,4]],"b":[0,0,0]}],"6":[{"t":[[0,1,2],[0,1,3],[0,4,5]],"b":[0,0,-1]},{"t":[[0,1,2],[0,1,3],[2,4,5]],"b":[0,0,-1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,1,5]],"b":[0,0,0,0]},{"t":[[0,1,2],[0,3,4],[1,3,5]],"b":[0,0,0]}],"7":[{"t":[[0,1,2],[0,3,4],[0,5,6]],"b":[-1,-1,-1]},{"t":[[0,1,2],[0,3,4],[3,5,6]],"b":[-1,-1,-1]},{"t":[[0,1,2],[0,1,3],[0,4,5],[0,4,6]],"b":[0,0,1,1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[2,4,6]],"b":[0,0,1,1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[4,5,6]],"b":[0,0,1,1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,5,6]],"b":[0,0,0,-1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[2,5,6]],"b":[0,0,0,-1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,1,5],[0,1,6]],"b":[0,0,0,0,0]},{"t":[[0,1,2],[0,1,3],[0,4,5],[1,4,6]],"b":[0,0,0,0]}],"8":[{"t":[[0,1,2],[0,1,3],[0,4,5],[0,6,7]],"b":[0,0,-1,-1]},{"t":[[0,1,2],[0,1,3],[0,4,5],[1,6,7]],"b":[0,0,-1,-1]},{"t":[[0,1,2],[0,1,3],[0,4,5],[2,6,7]],"b":[0,0,-1,-1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[2,6,7]],"b":[0,0,-1,-1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[3,6,7]],"b":[0,0,-1,-1]},{"t":[[0,1,2],[0,1,3],[0,4,5],[4,6,7]],"b":[0,0,-1,-1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[4,6,7]],"b":[0,0,-1,-1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[2,4,6],[2,4,7]],"b":[0,0,1,1,1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[4,5,6],[0,1,7]],"b":[0,0,1,1,0]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,5,6],[0,5,7]],"b":[0,0,0,1,1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[2,5,6],[2,5,7]],"b":[0,0,0,1,1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,1,5],[0,6,7]],"b":[0,0,0,0,-1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,1,5],[2,6,7]],"b":[0,0,0,0,-1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,1,5],[0,1,6],[0,1,7]],"b":[0,0,0,0,0,0]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,5,6],[1,5,7]],"b":[0,0,0,0,0]},{"t":[[0,1,2],[0,1,3],[0,4,5],[1,4,6],[0,4,7]],"b":[0,0,0,0,0]},{"t":[[0,1,2],[0,3,4],[1,3,5],[0,6,7]],"b":[0,0,0,-1]},{"t":[[0,1,2],[0,3,4],[1,3,5],[2,6,7]],"b":[0,0,0,-1]},{"t":[[0,1,2],[0,3,4],[3,5,6],[1,5,7]],"b":[0,0,0,0]}],"9":[{"t":[[0,1,2],[0,3,4],[0,5,6],[0,7,8]],"b":[-1,-1,-1,-1]},{"t":[[0,1,2],[0,3,4],[3,5,6],[0,7,8]],"b":[-1,-1,-1,-1]},{"t":[[0,1,2],[0,3,4],[3,5,6],[4,7,8]],"b":[-1,-1,-1,-1]},{"t":[[0,1,2],[0,3,4],[3,5,6],[5,7,8]],"b":[-1,-1,-1,-1]},{"t":[[0,1,2],[0,1,3],[0,4,5],[0,4,6],[0,7,8]],"b":[0,0,1,1,-1]},{"t":[[0,1,2],[0,1,3],[0,4,5],[0,4,6],[1,7,8]],"b":[0,0,1,1,-1]},{"t":[[0,1,2],[0,1,3],[0,4,5],[0,4,6],[2,7,8]],"b":[0,0,1,1,-1]},{"t":[[0,1,2],[0,1,3],[0,4,5],[4,6,7],[4,6,8]],"b":[0,0,-1,1,1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[2,4,6],[0,7,8]],"b":[0,0,1,1,-1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[2,4,6],[2,7,8]],"b":[0,0,1,1,-1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[2,4,6],[3,7,8]],"b":[0,0,1,1,-1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[2,4,6],[4,7,8]],"b":[0,0,1,1,-1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[2,4,6],[5,7,8]],"b":[0,0,1,1,-1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[2,4,6],[2,4,7],[2,4,8]],"b":[0,0,1,1,1,1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[4,6,7],[2,6,8]],"b":[0,0,1,1,1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[4,6,7],[4,6,8]],"b":[0,0,-1,1,1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[4,5,6],[0,7,8]],"b":[0,0,1,1,-1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[4,5,6],[2,7,8]],"b":[0,0,1,1,-1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[4,5,6],[3,7,8]],"b":[0,0,1,1,-1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[4,5,6],[0,1,7],[4,5,8]],"b":[0,0,1,1,0,1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[4,6,7],[5,6,8]],"b":[0,0,1,1,1]},{"t":[[0,1,2],[0,1,3],[2,4,5],[4,6,7],[6,7,8]],"b":[0,0,-1,1,1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,5,6],[0,7,8]],"b":[0,0,0,-1,-1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,5,6],[1,7,8]],"b":[0,0,0,-1,-1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,5,6],[2,7,8]],"b":[0,0,0,-1,-1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[2,5,6],[2,7,8]],"b":[0,0,0,-1,-1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[2,5,6],[3,7,8]],"b":[0,0,0,-1,-1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,5,6],[5,7,8]],"b":[0,0,0,-1,-1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[2,5,6],[5,7,8]],"b":[0,0,0,-1,-1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,5,6],[0,5,7],[0,5,8]],"b":[0,0,0,1,1,1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[2,5,6],[2,5,7],[2,5,8]],"b":[0,0,0,1,1,1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,1,5],[0,6,7],[0,6,8]],"b":[0,0,0,0,1,1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,1,5],[2,6,7],[2,6,8]],"b":[0,0,0,0,1,1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,1,5],[2,6,7],[6,7,8]],"b":[0,0,0,0,1,1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,1,5],[0,1,6],[0,7,8]],"b":[0,0,0,0,0,-1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,1,5],[0,1,6],[2,7,8]],"b":[0,0,0,0,0,-1]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,1,5],[0,1,6],[0,1,7],[0,1,8]],"b":[0,0,0,0,0,0,0]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,1,5],[0,6,7],[1,6,8]],"b":[0,0,0,0,0,0]},{"t":[[0,1,2],[0,1,3],[0,1,4],[0,5,6],[1,5,7],[0,5,8]],"b":[0,0,0,0,0,0]},{"t":[[0,1,2],[0,1,3],[0,4,5],[1,4,6],[0,7,8]],"b":[0,0,0,0,-1]},{"t":[[0,1,2],[0,1,3],[0,4,5],[1,4,6],[2,7,8]],"b":[0,0,0,0,-1]},{"t":[[0,1,2],[0,1,3],[0,4,5],[1,4,6],[4,7,8]],"b":[0,0,0,0,-1]},{"t":[[0,1,2],[0,1,3],[0,4,5],[1,4,6],[5,7,8]],"b":[0,0,0,0,-1]},{"t":[[0,1,2],[0,1,3],[0,4,5],[1,4,6],[0,4,7],[1,4,8]],"b":[0,0,0,0,0,0]},{"t":[[0,1,2],[0,3,4],[1,3,5],[0,6,7],[0,6,8]],"b":[0,0,0,1,1]},{"t":[[0,1,2],[0,3,4],[1,3,5],[2,6,7],[2,6,8]],"b":[0,0,0,1,1]},{"t":[[0,1,2],[0,3,4],[3,5,6],[1,5,7],[0,1,8]],"b":[0,0,0,0,0]},{"t":[[0,1,2],[0,3,4],[3,5,6],[1,5,7],[0,5,8]],"b":[0,0,0,0,0]}]},"counts":{"3":["1","1"],"4":["1","2"],"5":["2","5"],"6":["4","13"],"7":["9","35"],"8":["19","86"],"9":["48","250"],"10":["117","687"],"11":["307","2001"],"12":["821","5897"],"13":["2277","17847"],"14":["6437","54683"],"15":["18634","170578"],"16":["54775","537468"],"17":["163703","1714312"],"18":["495529","5516392"],"19":["1518706","17910741"],"20":["4703848","58588966"],"21":["14714754","193035920"],"22":["46444979","640132185"],"23":["147832051","2135841554"],"24":["474229588","7167550473"],"25":["1532565644","24186506740"],"26":["4987668376",null],"27":["16341943122",null],"28":["53893548670",null],"29":["178864303716",null],"30":["597324823858",null],"31":["2007077372841",null],"32":["6785293893723",null],"33":["23079469265877",null],"34":["78986559512445",null],"35":["272009385946565",null],"36":["942682923270921",null],"37":["3288215092730207",null],"38":["11546294293815871",null],"39":["40822555995619020",null],"40":["145355514146949756",null],"41":["521368825685017216",null],"42":["1884332692404756704",null],"43":["6864234819278439639",null],"44":["25210169903142450605",null],"45":["93376370197378397362",null],"46":["348901484221772950732",null],"47":["1315515059847660541637",null],"48":["5006462961841715983988",null],"49":["19235912707342891835548",null],"50":["74633241168603762638185",null],"51":["292458980246134252202323",null],"52":["1157627263174554733893496",null],"53":["4628955705726972278263044",null],"54":["18699420317197535362728748",null],"55":["76314266557060792701867517",null],"56":["314629690260696053392418857",null],"57":["1310321254565657094311684505",null],"58":["5511801361890548000336372608",null],"59":["23414706541609827818508522955",null],"60":["100437412382213269449062246429",null],"61":["434949806557208682131275749744",null],"62":["1901253454075612191854993572363",null],"63":["8387177249902648983389429633644",null],"64":["37332173371306044941293111430448",null],"65":["167633024214083063058459517257968",null],"66":["759212903126215940859094714547816",null],"67":["3467501084144813002254868094905860",null],"68":["15967725776832350108983202444889947",null],"69":["74126043199745117827972293728939622",null],"70":["346841736560992736888951861599504867",null],"71":["1635534931821028720220241812702843439",null],"72":["7771323614120745635994723625064743522",null],"73":["37203095568752568854500955098678249740",null],"74":["179414505857034859543131038888454744556",null],"75":["871523172123194499600525161154368346336",null],"76":["4263777725926120271132587993175860334701",null],"77":["21006722500703143624240243054075174966953",null],"78":["104214079622969142384493904207675129508785",null],"79":["520543722003138559948719118412775364088633",null],"80":["2617646724739221521059589519172655683909550",null]}}</script>
+
+<script>
+"use strict";
+const DATA = JSON.parse(document.getElementById("mtg-data").textContent);
+const SMALL = DATA.small || {};            // n -> [{t: [[a,b,c],...], b: [blockId | -1, ...]}]
+const COUNTS = DATA.counts || {};          // n -> [A000080 string, A048781 string | null]
+const KNOWN = DATA.known_upto || 25;
+const ROW_MAX = 40;                        // rows of pictures
+const NPAL = 8;
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const randint = (rng, lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
+
+/* A random 2-connected loop-free multigraph on v vertices with e >= v edges (v = 2: e >= 2), via an open ear
+   decomposition: a starting cycle, ears of new vertices between two distinct old vertices, then single edges.
+   Every 2-connected multigraph has such a decomposition, so every block can appear. */
+function randomBlock(v, e, rng) {
+  const edges = [];
+  const c = v === 2 ? 2 : randint(rng, Math.max(2, v - (e - v)), v);  // ears beyond the cycle each cost one edge
+  if (c === 2) { edges.push([0, 1], [0, 1]); } else { for (let i = 0; i < c; i++) edges.push([i, (i + 1) % c]); }
+  let nv = c;
+  while (nv < v) {
+    const k = randint(rng, 1, v - nv);
+    const a = randint(rng, 0, nv - 1);
+    let b = randint(rng, 0, nv - 2); if (b >= a) b++;
+    let prev = a;
+    for (let i = 0; i < k; i++) { edges.push([prev, nv]); prev = nv++; }
+    edges.push([prev, b]);
+  }
+  while (edges.length < e) {
+    const a = randint(rng, 0, v - 1);
+    let b = randint(rng, 0, v - 2); if (b >= a) b++;
+    edges.push([a, b]);
+  }
+  return edges;
+}
+
+/* A random minimal triangle graph on n points: a tree of units (lone triangles and blocks) glued at single
+   points.  A unit of s points shares one point with what is already there, so it adds s - 1 new points. */
+function randomMTG(n, rng) {
+  const t = [], b = [];
+  let np = 0, nblocks = 0;
+  while (np < n) {
+    const first = np === 0;
+    const room = first ? n : n - np + 1;
+    let s = room >= 4 && rng() < 0.45 ? randint(rng, 4, Math.min(room, 4 + randint(rng, 0, 8))) : 3;
+    if (room - s === 1) s = room;                  // never leave a single point over
+    const attach = first ? -1 : randint(rng, 0, np - 1);
+    if (s === 3) {
+      t.push([attach >= 0 ? attach : np++, np++, np++]); b.push(-1);
+      continue;
+    }
+    const v = randint(rng, 2, Math.floor(s / 2));
+    const edges = randomBlock(v, s - v, rng);
+    const slot = first ? -1 : randint(rng, 0, s - 1);  // which point of the unit is the shared one
+    const vid = [];
+    for (let i = 0; i < v; i++) vid.push(i === slot ? attach : np++);
+    const id = nblocks++;
+    edges.forEach(([x, y], j) => { t.push([vid[x], vid[y], v + j === slot ? attach : np++]); b.push(id); });
+  }
+  return { t, b };
+}
+
+/* Spring layout on the incidence graph (points + triangle centres), seeded from the rng. */
+function layout(g, n, rng) {
+  const T = g.t.length, N = n + T;
+  const x = new Float64Array(N), y = new Float64Array(N);
+  for (let i = 0; i < N; i++) { const a = rng() * 2 * Math.PI, r = Math.sqrt(rng()); x[i] = r * Math.cos(a); y[i] = r * Math.sin(a); }
+  const E = [];
+  g.t.forEach((tr, j) => tr.forEach(p => E.push([p, n + j])));
+  const k = 1 / Math.sqrt(N);
+  let temp = 0.15;
+  const dx = new Float64Array(N), dy = new Float64Array(N);
+  const iters = 260;
+  for (let it = 0; it < iters; it++) {
+    dx.fill(0); dy.fill(0);
+    for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+      let ex = x[i] - x[j], ey = y[i] - y[j];
+      let d2 = ex * ex + ey * ey + 1e-6;
+      const f = k * k / d2;
+      dx[i] += ex * f; dy[i] += ey * f; dx[j] -= ex * f; dy[j] -= ey * f;
+    }
+    for (const [a, c] of E) {
+      const ex = x[a] - x[c], ey = y[a] - y[c];
+      const d = Math.sqrt(ex * ex + ey * ey) + 1e-9;
+      const f = d / k * 1.6;
+      dx[a] -= ex * f; dy[a] -= ey * f; dx[c] += ex * f; dy[c] += ey * f;
+    }
+    for (let i = 0; i < N; i++) {
+      // gentle pull to the middle keeps separate pieces from drifting
+      dx[i] -= x[i] * 0.05; dy[i] -= y[i] * 0.05;
+      const d = Math.sqrt(dx[i] * dx[i] + dy[i] * dy[i]) + 1e-9;
+      const s = Math.min(d, temp) / d;
+      x[i] += dx[i] * s; y[i] += dy[i] * s;
+    }
+    temp *= 0.985;
+  }
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i < n; i++) { x0 = Math.min(x0, x[i]); x1 = Math.max(x1, x[i]); y0 = Math.min(y0, y[i]); y1 = Math.max(y1, y[i]); }
+  const span = Math.max(x1 - x0, y1 - y0, 1e-9), pad = 9, sc = (100 - 2 * pad) / span;
+  const ox = pad + ((100 - 2 * pad) - (x1 - x0) * sc) / 2, oy = pad + ((100 - 2 * pad) - (y1 - y0) * sc) / 2;
+  const P = [];
+  for (let i = 0; i < n; i++) P.push([ox + (x[i] - x0) * sc, oy + (y[i] - y0) * sc]);
+  return P;
+}
+
+const SVGNS = "http://www.w3.org/2000/svg";
+function drawCard(g, n, rng, label) {
+  const card = document.createElement("div");
+  card.className = "card";
+  const P = layout(g, n, rng);
+  const svg = document.createElementNS(SVGNS, "svg");
+  svg.setAttribute("viewBox", "0 0 100 100");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `${g.t.length} triangles on ${n} points`);
+  const colour = document.getElementById("colour").checked;
+  // remap block ids to palette slots in order of first appearance
+  const slot = new Map();
+  g.t.forEach((tr, j) => {
+    const poly = document.createElementNS(SVGNS, "polygon");
+    poly.setAttribute("points", tr.map(p => P[p].map(v => v.toFixed(2)).join(",")).join(" "));
+    poly.setAttribute("class", "tri");
+    let c = "var(--accent)";
+    if (colour) {
+      if (g.b[j] < 0) c = "var(--lone)";
+      else { if (!slot.has(g.b[j])) slot.set(g.b[j], slot.size % NPAL); c = `var(--c${slot.get(g.b[j])})`; }
+    }
+    poly.style.fill = c; poly.style.stroke = c;
+    svg.appendChild(poly);
+  });
+  const r = n > 30 ? 1.1 : n > 16 ? 1.4 : 1.8;
+  P.forEach(([px, py]) => {
+    const c = document.createElementNS(SVGNS, "circle");
+    c.setAttribute("cx", px.toFixed(2)); c.setAttribute("cy", py.toFixed(2)); c.setAttribute("r", r);
+    c.setAttribute("class", "pt");
+    svg.appendChild(c);
+  });
+  card.appendChild(svg);
+  const tag = document.createElement("span");
+  tag.className = "tag";
+  tag.textContent = label;
+  card.appendChild(tag);
+  return card;
+}
+
+const fmt = s => s.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+let seed = (Math.random() * 2 ** 32) >>> 0;
+
+function buildRows() {
+  const rows = document.getElementById("rows");
+  rows.innerHTML = "";
+  const per = +document.getElementById("per").value;
+  for (let n = 3; n <= ROW_MAX; n++) {
+    const row = document.createElement("section");
+    row.className = "row";
+    const head = document.createElement("div");
+    head.className = "row-head";
+    const cnt = COUNTS[n] ? COUNTS[n][0] : "?";
+    const all = SMALL[n];
+    head.innerHTML = `<h2><i>n</i> = ${n}</h2><span class="count">${fmt(cnt)} graph${cnt === "1" ? "" : "s"}</span>` +
+      (n > KNOWN ? `<span class="new">new</span>` : "") +
+      `<span class="span">${all ? (all.length === 1 ? "the only one" : `all ${all.length} shown`) : `${per} random examples`}</span>`;
+    row.appendChild(head);
+    const cards = document.createElement("div");
+    cards.className = "cards";
+    row.appendChild(cards);
+    rows.appendChild(row);
+    row._fill = () => {
+      const rng = mulberry32(seed ^ (n * 2654435761));
+      if (all) all.forEach((g, i) => cards.appendChild(drawCard(g, n, rng, `${g.t.length}△`)));
+      else for (let i = 0; i < per; i++) { const g = randomMTG(n, rng); cards.appendChild(drawCard(g, n, rng, `${g.t.length}△`)); }
+    };
+  }
+  const io = new IntersectionObserver(entries => {
+    for (const en of entries) if (en.isIntersecting && en.target._fill) { en.target._fill(); en.target._fill = null; io.unobserve(en.target); }
+  }, { rootMargin: "400px" });
+  for (const r of rows.children) io.observe(r);
+}
+
+function buildTable() {
+  const tb = document.getElementById("tbody");
+  const ns = Object.keys(COUNTS).map(Number).sort((a, b) => a - b);
+  let maxn = 0;
+  tb.innerHTML = ns.map(n => {
+    maxn = n;
+    const [a, t] = COUNTS[n];
+    const isnew = n > KNOWN;
+    return `<tr class="${isnew ? "isnew" : ""}"><td class="n">${n}</td><td class="a">${a}</td><td class="a">${t ?? "…"}</td>` +
+      `<td class="st">${isnew ? "new" : "known"}</td></tr>`;
+  }).join("");
+  if (maxn) document.getElementById("maxn").textContent = `n = ${maxn}`;
+}
+
+document.getElementById("regen").addEventListener("click", () => { seed = (Math.random() * 2 ** 32) >>> 0; buildRows(); });
+document.getElementById("per").addEventListener("change", buildRows);
+document.getElementById("colour").addEventListener("change", buildRows);
+buildRows();
+buildTable();
+</script>
+</html>
