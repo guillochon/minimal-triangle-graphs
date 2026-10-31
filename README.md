@@ -27,7 +27,10 @@ Everything runs in the browser, in one file (`index.html`).
   2-connected loop-free multigraph (every block has one), each edge given its own corner point. Units are glued
   at random existing points until there are exactly n. Every minimal triangle graph can arise, but not with equal
   probability.
-- **Layout.** A spring layout of the point–triangle incidence graph, drawn as translucent triangles.
+- **Layout.** A spring layout of the point–triangle incidence graph, then two clean-ups: books (several triangles
+  on one pair of points) are fanned open around their shared pair, and private corners are mirrored across
+  their triangle when that removes crossings; the best of several tries is kept. Triangles on a common pair
+  always overlap a little; otherwise every graph up to n = 20 is drawn without crossings.
 
 Made by James Guillochon with Claude. The source lives in the oeis-sniper project (`viz/A000080/`); this repo holds
 the published copy.

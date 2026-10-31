@@ -252,7 +252,7 @@ function randomMTG(n, rng) {
 }
 
 /* Spring layout on the incidence graph (points + triangle centres), seeded from the rng. */
-function layout(g, n, rng) {
+function layoutOnce(g, n, rng) {
   const T = g.t.length, N = n + T;
   const x = new Float64Array(N), y = new Float64Array(N);
   for (let i = 0; i < N; i++) { const a = rng() * 2 * Math.PI, r = Math.sqrt(rng()); x[i] = r * Math.cos(a); y[i] = r * Math.sin(a); }
@@ -292,6 +292,129 @@ function layout(g, n, rng) {
   const P = [];
   for (let i = 0; i < n; i++) P.push([ox + (x[i] - x0) * sc, oy + (y[i] - y0) * sc]);
   return P;
+}
+
+/* Number of proper crossings between sides of different triangles that share no endpoint.  Triangles on a
+   common pair (pages of a book) always overlap, so they don't count. */
+function crossings(g, P) {
+  const S = [];
+  g.t.forEach((tr, j) => { S.push([tr[0], tr[1], j], [tr[1], tr[2], j], [tr[0], tr[2], j]); });
+  const orient = (a, b, c) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+  let k = 0;
+  for (let i = 0; i < S.length; i++) for (let j = i + 1; j < S.length; j++) {
+    const [a, b, ti] = S[i], [c, d, tj] = S[j];
+    if (ti === tj || a === c || a === d || b === c || b === d) continue;
+    const A = g.t[ti], B = g.t[tj];
+    if ((A[0] === B[0] || A[0] === B[1] || A[0] === B[2]) + (A[1] === B[0] || A[1] === B[1] || A[1] === B[2]) +
+        (A[2] === B[0] || A[2] === B[1] || A[2] === B[2]) >= 2) continue;
+    if (orient(P[a], P[b], P[c]) * orient(P[a], P[b], P[d]) < 0 &&
+        orient(P[c], P[d], P[a]) * orient(P[c], P[d], P[b]) < 0) k++;
+  }
+  return k;
+}
+
+/* A point on just one triangle (a private corner) can sit on either side of its triangle's opposite side.
+   Try mirroring each one, or pulling it in to the midpoint's normal at the same distance, and keep moves that
+   remove crossings. */
+function untangle(g, n, P) {
+  const deg = new Array(n).fill(0), home = new Array(n).fill(-1);
+  g.t.forEach((tr, j) => tr.forEach(p => { deg[p]++; home[p] = j; }));
+  let k = crossings(g, P);
+  for (let pass = 0; pass < 3 && k > 0; pass++) {
+    let moved = false;
+    for (let x = 0; x < n && k > 0; x++) {
+      if (deg[x] !== 1) continue;
+      const [a, b] = g.t[home[x]].filter(p => p !== x);
+      const [ax, ay] = P[a], [bx, by] = P[b], [px, py] = P[x];
+      const ux = bx - ax, uy = by - ay, L2 = ux * ux + uy * uy || 1e-9;
+      const s = ((px - ax) * ux + (py - ay) * uy) / L2;
+      const fx = ax + s * ux, fy = ay + s * uy;           // foot of the perpendicular
+      const mx = (ax + bx) / 2, my = (ay + by) / 2, h = Math.hypot(px - fx, py - fy) || Math.sqrt(L2) / 2;
+      const nx = -uy / Math.sqrt(L2), ny = ux / Math.sqrt(L2);
+      const cands = [[2 * fx - px, 2 * fy - py], [mx + nx * h, my + ny * h], [mx - nx * h, my - ny * h]];
+      for (const c of cands) {
+        const old = P[x];
+        P[x] = c;
+        const k2 = crossings(g, P);
+        if (k2 < k) { k = k2; moved = true; break; }
+        P[x] = old;
+      }
+    }
+    if (!moved) break;
+  }
+  return k;
+}
+
+function fitBox(P) {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const [x, y] of P) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  const span = Math.max(x1 - x0, y1 - y0, 1e-9), pad = 9, sc = (100 - 2 * pad) / span;
+  const ox = pad + ((100 - 2 * pad) - (x1 - x0) * sc) / 2, oy = pad + ((100 - 2 * pad) - (y1 - y0) * sc) / 2;
+  return P.map(([x, y]) => [ox + (x - x0) * sc, oy + (y - y0) * sc]);
+}
+
+/* Several triangles on one pair of points form a "book" with that pair as its spine.  Springs squash books
+   flat, so stretch a short spine and open the pages whose third corner is private (on no other triangle)
+   evenly on both sides of it; corners shared with other triangles stay where they are. */
+function fanBooks(g, n, P) {
+  const deg = new Array(n).fill(0);
+  g.t.forEach(tr => tr.forEach(p => deg[p]++));
+  const books = new Map();
+  g.t.forEach(tr => {
+    for (let i = 0; i < 3; i++) {
+      const x = tr[i], [a, b] = tr.filter((_, j) => j !== i).sort((u, v) => u - v);
+      const key = a * 4096 + b;
+      if (!books.has(key)) books.set(key, [a, b, []]);
+      books.get(key)[2].push(x);
+    }
+  });
+  // page length from the typical triangle side, so books are neither specks nor sprawling
+  const sides = [];
+  g.t.forEach(([p, q, r]) => sides.push(Math.hypot(P[p][0] - P[q][0], P[p][1] - P[q][1]),
+    Math.hypot(P[q][0] - P[r][0], P[q][1] - P[r][1]), Math.hypot(P[p][0] - P[r][0], P[p][1] - P[r][1])));
+  sides.sort((u, v) => u - v);
+  const unit = sides[sides.length >> 1] || 1;
+  for (const [a, b, xs] of books.values()) {
+    if (xs.length < 2) continue;
+    let [ax, ay] = P[a], [bx, by] = P[b];
+    let d = Math.hypot(bx - ax, by - ay);
+    const mx = (ax + bx) / 2, my = (ay + by) / 2;
+    let ux = d > 1e-9 ? (bx - ax) / d : 1, uy = d > 1e-9 ? (by - ay) / d : 0;
+    if (d < 0.6 * unit) {
+      d = 0.6 * unit;
+      P[a] = [mx - ux * d / 2, my - uy * d / 2];
+      P[b] = [mx + ux * d / 2, my + uy * d / 2];
+    }
+    const r = Math.min(Math.max(0.8 * d, 0.9 * unit), 1.4 * unit);
+    const sideOf = x => ((P[x][0] - mx) * -uy + (P[x][1] - my) * ux) >= 0 ? 1 : -1;
+    const fixed = xs.filter(x => deg[x] !== 1), free = xs.filter(x => deg[x] === 1);
+    if (!free.length) continue;
+    let nUp = fixed.filter(x => sideOf(x) > 0).length, nDown = fixed.length - nUp;
+    const up = [], down = [];
+    for (const x of free) {
+      const want = sideOf(x);
+      if (want > 0 ? nUp <= nDown : nDown > nUp) { up.push(x); nUp++; } else { down.push(x); nDown++; }
+    }
+    for (const [grp, sg] of [[up, 1], [down, -1]]) grp.forEach((x, i) => {
+      const th = Math.PI * (i + 1) / (grp.length + 1);
+      const c = Math.cos(th), sn = Math.sin(th) * sg;
+      P[x] = [mx + r * (c * ux - sn * uy), my + r * (c * uy + sn * ux)];
+    });
+  }
+}
+
+/* Triangles only share points, so a good picture has no crossing sides: keep the best of several untangled
+   layouts. */
+function layout(g, n, rng) {
+  const tries = n <= 12 ? 10 : n <= 25 ? 6 : 4;
+  let best = null, bestK = Infinity;
+  for (let i = 0; i < tries && bestK > 0; i++) {
+    const P = layoutOnce(g, n, rng);
+    fanBooks(g, n, P);
+    const k = untangle(g, n, P);
+    if (k < bestK) { best = P; bestK = k; }
+  }
+  return fitBox(best);
 }
 
 const SVGNS = "http://www.w3.org/2000/svg";
